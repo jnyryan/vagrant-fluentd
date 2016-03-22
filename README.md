@@ -24,39 +24,64 @@ Install ElasticSearch plugin
 
 Edit /etc/td-agent/td-agent.conf
 ```
-<ROOT>
-  <source>
-    type tcp
-    format none
-    port 5140
-    tag syslog
-  </source>
-  <source>
-    type http
-    port 8888
-    bind 0.0.0.0
-    body_size_limit 32m
-    keepalive_timeout 10s
-  </source>
-  <match *.**>
-    type copy
-    <store>
-      type elasticsearch
-      host notsplunk-internal.glgresearch.com
-      port 80
-      path /elastic/
-      include_tag_key true
-      logstash_format true
-      flush_interval 10s
-    </store>
-  </match>
-</ROOT>
+####
+## Source descriptions:
+##
+
+## built-in TCP input
+## @see http://docs.fluentd.org/articles/in_forward
+<source>
+  type forward
+</source>
+
+# HTTP input
+# POST http://localhost:8888/<tag>?json=<json>
+# POST http://localhost:8888/td.myapp.login?json={"user"%3A"me"}
+# @see http://docs.fluentd.org/articles/in_http
+<source>
+  type http
+  port 8888
+</source>
+
+## nxlog input
+<source>
+  type tcp
+  format none
+  port 5140
+  tag nxlog
+</source>
+
+####
+## Output descriptions:
+## match all tags and output to elastic and stdout
+##
+<match *.**>
+  type copy
+  <store>
+    type elasticsearch
+    host <IP of ELASTIC SEARCH SERVER>
+    port 80
+    path /elastic/
+    include_tag_key true
+    logstash_format true
+    flush_interval 10s
+  </store>
+  <store>
+    type stdout
+  </store>
+</match>
 ```
 
 Restart the Service
 
 ``` bash
 sudo /etc/init.d/td-agent restart
+```
+
+Tail the logs
+
+``` bash
+tail /var/log/td-agent/td-agent.log
 ```
 
 
@@ -77,17 +102,24 @@ Pidfile %ROOT%\data\nxlog.pid
 SpoolDir %ROOT%\data
 LogFile %ROOT%\data\nxlog.log
 
+# NXlog JSON extension activation (needed to forward messages to Logstash)
+<Extension json>
+  Module      xm_json
+</Extension>
+
 <Input in>
-  Module im_file
-  File 'C:\Temp\nxlog_test.log' #Put the file to be tailed here.
-  SavePos TRUE
-  InputType LineBased
+  Module      im_file
+  File        'C:\Temp\nxlog_test.log' #Put the file to be tailed here.
+  SavePos     TRUE
+  InputType   LineBased
+  Exec	      parse_json();
+  Exec        $EventTime = parsedate($timestamp);
 </Input>
 
 <Output out>
   Module om_tcp
-  Host <IP OF Fluentd Server>
-  Port 5140
+  Host   <IP of Fluentd Broker>
+  Port   5140
 </Output>
 
 <Route r>
